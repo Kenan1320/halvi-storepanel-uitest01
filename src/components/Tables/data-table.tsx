@@ -10,11 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Plus, Search } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton" // Add this import
 
 export type Column = {
     key: string
     label: string
-    render?: (value: any, item: any) => React.ReactNode
+    render?: (item: any) => React.ReactNode
     filterable?: boolean
     filterOptions?: string[]
 }
@@ -26,6 +27,7 @@ export type DataTableProps = {
     onAddClick?: () => void
     onRowClick?: (item: any) => void
     pageSize?: number
+    loading?: boolean // Add loading prop
 }
 
 export function DataTable({
@@ -35,6 +37,7 @@ export function DataTable({
     onAddClick,
     onRowClick,
     pageSize = 5,
+    loading = false, // Default to false
 }: DataTableProps) {
     const [filteredData, setFilteredData] = useState<any[]>(data)
     const [currentPage, setCurrentPage] = useState(1)
@@ -87,6 +90,7 @@ export function DataTable({
     // Get filterable columns
     const filterableColumns = columns.filter((col) => col.filterable)
     const plural = (type==="Category"?type.toLowerCase().slice(0, -1)+"ies":type.toLowerCase()+"s")
+
     return (
         <Card className="w-full shadow-sm dark:bg-gray-dark">
             <CardHeader className="pb-3">
@@ -96,9 +100,8 @@ export function DataTable({
                         <CardDescription>{'View and manage all the '+plural }</CardDescription>
                     </div>
 
-
                     {onAddClick && (
-                        <Button onClick={onAddClick} className="shrink-0">
+                        <Button onClick={onAddClick} className="shrink-0" disabled={loading}>
                             <Plus className="h-4 w-4 mr-2" />
                             {"Create "+ type}
                         </Button>
@@ -117,6 +120,7 @@ export function DataTable({
                                 className="pl-8"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
+                                disabled={loading}
                             />
                         </div>
 
@@ -127,6 +131,7 @@ export function DataTable({
                                     key={column.key}
                                     value={filters[column.key] || "all"}
                                     onValueChange={(value) => handleFilterChange(column.key, value)}
+                                    disabled={loading}
                                 >
                                     <SelectTrigger className="w-[180px]">
                                         <SelectValue placeholder={`Filter by ${column.label}`} />
@@ -143,7 +148,13 @@ export function DataTable({
                             ))}
 
                             {Object.keys(filters).length > 0 && (
-                                <Button variant="outline" size="sm" onClick={() => setFilters({})} className="h-10">
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => setFilters({})}
+                                    className="h-10"
+                                    disabled={loading}
+                                >
                                     Clear Filters
                                 </Button>
                             )}
@@ -159,7 +170,11 @@ export function DataTable({
                                     return (
                                         <Badge key={key} variant="secondary" className="px-3 py-1">
                                             {column?.label}: {value}
-                                            <button className="ml-2 text-xs" onClick={() => handleFilterChange(key, "all")}>
+                                            <button 
+                                                className="ml-2 text-xs" 
+                                                onClick={() => handleFilterChange(key, "all")}
+                                                disabled={loading}
+                                            >
                                                 ×
                                             </button>
                                         </Badge>
@@ -181,16 +196,26 @@ export function DataTable({
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {currentData.length > 0 ? (
+                                {loading ? (
+                                    // Loading state
+                                    <TableRow>
+                                        <TableCell colSpan={columns.length} className="h-24 text-center">
+                                            <div className="flex items-center justify-center space-x-4">
+                                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100" />
+                                                <span>Loading {plural}...</span>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ) : currentData.length > 0 ? (
                                     currentData.map((item, index) => (
                                         <TableRow
                                             key={index}
-                                            onClick={() => onRowClick && onRowClick(item)}
+                                            onClick={() => !loading && onRowClick && onRowClick(item)}
                                             className={onRowClick ? "cursor-pointer hover:bg-muted" : ""}
                                         >
                                             {columns.map((column) => (
                                                 <TableCell key={`${index}-${column.key}`}>
-                                                    {column.render ? column.render(item[column.key], item) : item[column.key]}
+                                                    {column.render ? column.render(item) : item[column.key]}
                                                 </TableCell>
                                             ))}
                                         </TableRow>
@@ -206,28 +231,45 @@ export function DataTable({
                         </Table>
                     </div>
 
-                    {/* Pagination */}
+                    {/* Pagination - Disabled when loading */}
                     {filteredData.length > 0 && (
                         <div className="flex items-center justify-between">
                             <div className="text-sm text-muted-foreground">
-                                Showing {Math.min(filteredData.length, (currentPage - 1) * pageSize + 1)} to{" "}
-                                {Math.min(currentPage * pageSize, filteredData.length)} of {filteredData.length} entries
+                                {loading ? (
+                                    <Skeleton className="h-4 w-[200px]" />
+                                ) : (
+                                    `Showing ${Math.min(filteredData.length, (currentPage - 1) * pageSize + 1)} to ${Math.min(currentPage * pageSize, filteredData.length)} of ${filteredData.length} entries`
+                                )}
                             </div>
                             <div className="flex items-center space-x-2">
-                                <Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 1}>
+                                <Button 
+                                    variant="outline" 
+                                    size="icon" 
+                                    onClick={goToFirstPage} 
+                                    disabled={currentPage === 1 || loading}
+                                >
                                     <ChevronsLeft className="h-4 w-4" />
                                 </Button>
-                                <Button variant="outline" size="icon" onClick={goToPreviousPage} disabled={currentPage === 1}>
+                                <Button 
+                                    variant="outline" 
+                                    size="icon" 
+                                    onClick={goToPreviousPage} 
+                                    disabled={currentPage === 1 || loading}
+                                >
                                     <ChevronLeft className="h-4 w-4" />
                                 </Button>
                                 <span className="text-sm font-medium">
-                                    Page {currentPage} of {totalPages || 1}
+                                    {loading ? (
+                                        <Skeleton className="h-4 w-[80px]" />
+                                    ) : (
+                                        `Page ${currentPage} of ${totalPages || 1}`
+                                    )}
                                 </span>
                                 <Button
                                     variant="outline"
                                     size="icon"
                                     onClick={goToNextPage}
-                                    disabled={currentPage === totalPages || totalPages === 0}
+                                    disabled={currentPage === totalPages || totalPages === 0 || loading}
                                 >
                                     <ChevronRight className="h-4 w-4" />
                                 </Button>
@@ -235,7 +277,7 @@ export function DataTable({
                                     variant="outline"
                                     size="icon"
                                     onClick={goToLastPage}
-                                    disabled={currentPage === totalPages || totalPages === 0}
+                                    disabled={currentPage === totalPages || totalPages === 0 || loading}
                                 >
                                     <ChevronsRight className="h-4 w-4" />
                                 </Button>

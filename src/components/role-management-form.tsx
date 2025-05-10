@@ -1,7 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useFormik } from "formik"
+import * as Yup from "yup"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,123 +12,154 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Search, X } from "lucide-react"
-// import { toast } from "@/components/ui/use-toast"
+import { useAppDispatch, useAppSelector } from "@/store/hooks"
+import { ModulePermission, PermissionAction } from "@/types/roles.type"
+import { createRole, getRoleById, updateRole } from "@/store/slices/role-slice"
+import { toast } from "@/hooks/use-toast"
+import { getAllModules } from "@/store/slices/module-slice"
 
-interface Module {
-  id: string
-  name: string
-}
-
-interface Role {
-  id?: string
-  name: string
-  description?: string
-  permissions: {
-    module: string
-    permissions: string[]
-  }[]
-}
-
-interface PermissionData {
-  moduleId: string
-  moduleName: string
-  permissionActions: Record<string, boolean>
-}
-
-const availableModules: Module[] = [
-  { id: "users", name: "Users" },
-  { id: "products", name: "Products" },
-  { id: "orders", name: "Orders" },
-  { id: "customers", name: "Customers" },
-  { id: "inventory", name: "Inventory" },
-  { id: "reports", name: "Reports" },
-  { id: "settings", name: "Settings" },
-  { id: "billing", name: "Billing" },
-]
-
-const permissionTypes = ["List", "Update", "Create", "Delete"]
+const validationSchema = Yup.object({
+  name: Yup.string().required("Role name is required"),
+  description: Yup.string().required("Description is required"),
+  permissions: Yup.array()
+    .of(
+      Yup.object({
+        moduleId: Yup.number().required(),
+        permissions: Yup.array().min(1, "At least one permission is required")
+      })
+    )
+    .min(1, "At least one module is required")
+})
 
 export default function RoleManagementForm({ 
-  initialData,
-  onSave,
-  isSubmitting 
+  roleId,
+  onSuccess
 }: {
-  initialData?: Role
-  onSave: (data: Role) => Promise<void>
-  isSubmitting: boolean
+  roleId?: number
+  onSuccess?: () => void
 }) {
   const router = useRouter()
-  const [roleName, setRoleName] = useState(initialData?.name || "")
-  const [selectedModules, setSelectedModules] = useState<string[]>([])
-  const [permissionData, setPermissionData] = useState<PermissionData[]>([])
+  const dispatch = useAppDispatch()
+  const { modules } = useAppSelector((state) => state.module)
+  const { role, loading: roleLoading } = useAppSelector((state) => state.role)
+
+  const formik = useFormik({
+    initialValues: {
+      name: "",
+      description: "",
+      permissions: [] as Array<{
+        moduleId: number
+        permissions: PermissionAction[]
+      }>
+    },
+    validationSchema,
+    onSubmit: async (values) => {
+      try {
+        if (roleId) {
+          await dispatch(updateRole({ id: roleId, roleData: {
+            id:roleId,
+            ...values
+          } })).unwrap()
+          toast({
+            title: "Success",
+            description: "Role updated successfully"
+          })
+        } else {
+          await dispatch(createRole(values)).unwrap()
+          toast({
+            title: "Success",
+            description: "Role created successfully"
+          })
+        }
+        
+        onSuccess ? onSuccess() : router.push("/access-control/roles")
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: error.message || `Failed to ${roleId ? "update" : "create"} role`,
+          variant: "destructive"
+        })
+      }
+    }
+  })
+
+  // Initialize permission data state
+  const [permissionData, setPermissionData] = useState<ModulePermission[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(5)
   const [selectAll, setSelectAll] = useState(false)
 
-  // Initialize form with initial data
+  // Load modules and role data
   useEffect(() => {
-    if (initialData) {
-      setRoleName(initialData.name)
-      const modules = initialData.permissions.map(p => p.module)
-      setSelectedModules(modules)
-      
-      const initialPermissions = initialData.permissions.map(perm => ({
-        moduleId: perm.module,
-        moduleName: availableModules.find(m => m.id === perm.module)?.name || perm.module,
-        permissionActions: permissionTypes.reduce((acc, type) => ({
-          ...acc,
-          [type]: perm.permissions.includes(type)
-        }), {} as Record<string, boolean>)
+    dispatch(getAllModules())
+    if (roleId) dispatch(getRoleById(roleId))
+  }, [roleId, dispatch])
+
+  // Initialize form with role data
+  useEffect(() => {
+    if (role) {
+      formik.setValues({
+        name: role.name,
+        description: role.description,
+        permissions: role.permissions.map(p => ({
+          moduleId: p.moduleId,
+          permissions: p.permissions
+        }))
+      })
+
+      const initialPermissions = role.permissions.map(perm => ({
+        moduleId: perm.moduleId,
+        moduleName: modules?.find(m => m.id === perm.moduleId)?.name || perm.moduleId.toString(),
+        permissionActions: {
+          LIST: perm.permissions.includes("LIST"),
+          UPDATE: perm.permissions.includes("UPDATE"),
+          DELETE: perm.permissions.includes("DELETE"),
+          CREATE: perm.permissions.includes("CREATE")
+        }
       }))
       
       setPermissionData(initialPermissions)
-      
-      // Check if all permissions are selected
-      const allSelected = initialPermissions.every(perm => 
-        Object.values(perm.permissionActions).every(Boolean))
-      setSelectAll(allSelected)
+      setSelectAll(initialPermissions.every(p => Object.values(p.permissionActions).every(Boolean)))
     }
-  }, [initialData])
-
-  // Update permission data when modules change
-  useEffect(() => {
-    const newPermissionData = [...permissionData]
-    
-    // Add new modules
-    selectedModules.forEach(moduleId => {
-      if (!newPermissionData.some(p => p.moduleId === moduleId)) {
-        const module = availableModules.find(m => m.id === moduleId)
-        newPermissionData.push({
-          moduleId,
-          moduleName: module?.name || moduleId,
-          permissionActions: permissionTypes.reduce((acc, type) => ({
-            ...acc,
-            [type]: false
-          }), {} as Record<string, boolean>)
-        })
-      }
-    })
-    
-    // Remove unselected modules
-    const updatedPermissionData = newPermissionData.filter(p => 
-      selectedModules.includes(p.moduleId)
-    )
-    
-    setPermissionData(updatedPermissionData)
-  }, [selectedModules])
+  }, [role, modules])
 
   // Handle module selection
-  const handleModuleSelect = (moduleId: string) => {
-    if (selectedModules.includes(moduleId)) {
-      setSelectedModules(selectedModules.filter(id => id !== moduleId))
+  const handleModuleSelect = (moduleId: number) => {
+    const currentPermissions = [...formik.values.permissions]
+    const moduleIndex = currentPermissions.findIndex(p => p.moduleId === moduleId)
+
+    if (moduleIndex >= 0) {
+      // Remove module
+      currentPermissions.splice(moduleIndex, 1)
+      setPermissionData(prev => prev.filter(p => p.moduleId !== moduleId))
     } else {
-      setSelectedModules([...selectedModules, moduleId])
+      // Add module
+      currentPermissions.push({
+        moduleId,
+        permissions: []
+      })
+      const module = modules?.find(m => m.id === moduleId)
+      setPermissionData(prev => [
+        ...prev,
+        {
+          moduleId,
+          moduleName: module?.name || moduleId.toString(),
+          permissionActions: {
+            LIST: false,
+            UPDATE: false,
+            DELETE: false,
+            CREATE: false
+          }
+        }
+      ])
     }
+
+    formik.setFieldValue("permissions", currentPermissions)
   }
 
   // Handle permission checkbox change
-  const handlePermissionChange = (moduleId: string, permissionType: string, checked: boolean) => {
+  const handlePermissionChange = (moduleId: number, permissionType: PermissionAction, checked: boolean) => {
     setPermissionData(prev => 
       prev.map(item => 
         item.moduleId === moduleId 
@@ -140,28 +173,50 @@ export default function RoleManagementForm({
           : item
       )
     )
+
+    // Update formik values
+    const updatedPermissions = formik.values.permissions.map(p => {
+      if (p.moduleId === moduleId) {
+        const permissions = checked
+          ? [...p.permissions, permissionType]
+          : p.permissions.filter(perm => perm !== permissionType)
+        return { ...p, permissions }
+      }
+      return p
+    })
+
+    formik.setFieldValue("permissions", updatedPermissions)
   }
 
   // Toggle all permissions for a module
-  const toggleModulePermissions = (moduleId: string) => {
+  const toggleModulePermissions = (moduleId: number) => {
     const module = permissionData.find(p => p.moduleId === moduleId)
     if (!module) return
 
     const allChecked = Object.values(module.permissionActions).every(Boolean)
-    
+    const newPermissions = allChecked ? [] : ["LIST", "UPDATE", "DELETE", "CREATE"] as PermissionAction[]
+
     setPermissionData(prev => 
       prev.map(item => 
         item.moduleId === moduleId 
           ? { 
               ...item, 
-              permissionActions: Object.keys(item.permissionActions).reduce(
-                (acc, type) => ({ ...acc, [type]: !allChecked }), 
-                {} as Record<string, boolean>
-              ) 
+              permissionActions: {
+                LIST: !allChecked,
+                UPDATE: !allChecked,
+                DELETE: !allChecked,
+                CREATE: !allChecked
+              }
             } 
           : item
       )
     )
+
+    // Update formik values
+    const updatedPermissions = formik.values.permissions.map(p => 
+      p.moduleId === moduleId ? { ...p, permissions: newPermissions } : p
+    )
+    formik.setFieldValue("permissions", updatedPermissions)
   }
 
   // Toggle all permissions for all modules
@@ -169,19 +224,32 @@ export default function RoleManagementForm({
     const newSelectAll = !selectAll
     setSelectAll(newSelectAll)
     
+    const newPermissions = newSelectAll 
+      ? ["LIST", "UPDATE", "DELETE", "CREATE"] as PermissionAction[]
+      : []
+
     setPermissionData(prev => 
       prev.map(item => ({
         ...item,
-        permissionActions: Object.keys(item.permissionActions).reduce(
-          (acc, type) => ({ ...acc, [type]: newSelectAll }), 
-          {} as Record<string, boolean>
-        )
+        permissionActions: {
+          LIST: newSelectAll,
+          UPDATE: newSelectAll,
+          DELETE: newSelectAll,
+          CREATE: newSelectAll
+        }
       }))
     )
+
+    // Update formik values
+    const updatedPermissions = formik.values.permissions.map(p => ({
+      ...p,
+      permissions: newPermissions
+    }))
+    formik.setFieldValue("permissions", updatedPermissions)
   }
 
   // Toggle all permissions of a specific type across modules
-  const togglePermissionType = (permissionType: string) => {
+  const togglePermissionType = (permissionType: PermissionAction) => {
     const allChecked = permissionData.every(p => p.permissionActions[permissionType])
     
     setPermissionData(prev => 
@@ -193,11 +261,16 @@ export default function RoleManagementForm({
         }
       }))
     )
-  }
 
-  // Remove a selected module
-  const removeModule = (moduleId: string) => {
-    setSelectedModules(selectedModules.filter(id => id !== moduleId))
+    // Update formik values
+    const updatedPermissions = formik.values.permissions.map(p => {
+      const hasPermission = p.permissions.includes(permissionType)
+      const permissions = allChecked
+        ? p.permissions.filter(perm => perm !== permissionType)
+        : [...p.permissions, permissionType]
+      return { ...p, permissions }
+    })
+    formik.setFieldValue("permissions", updatedPermissions)
   }
 
   // Filter modules based on search query
@@ -212,92 +285,77 @@ export default function RoleManagementForm({
     currentPage * itemsPerPage
   )
 
-  // Handle form submission
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    // Validate at least one permission is selected
-    const hasPermissions = permissionData.some(perm => 
-      Object.values(perm.permissionActions).some(Boolean)
+  if (roleId && roleLoading) {
+    return (
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle>{roleId ? "Edit Role" : "Create New Role"}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+        </CardContent>
+      </Card>
     )
-    
-    if (!hasPermissions) {
-    //   toast({
-    //     title: "Error",
-    //     description: "At least one permission must be selected",
-    //     variant: "destructive"
-    //   })
-      return
-    }
-
-    // Prepare role data
-    const roleData: Role = {
-      name: roleName,
-      permissions: permissionData
-        .filter(perm => Object.values(perm.permissionActions).some(Boolean))
-        .map(perm => ({
-          module: perm.moduleId,
-          permissions: Object.entries(perm.permissionActions)
-            .filter(([_, isChecked]) => isChecked)
-            .map(([type]) => type)
-        }))
-    }
-
-    if (initialData?.id) {
-      roleData.id = initialData.id
-    }
-
-    try {
-      await onSave(roleData)
-    //   toast({
-    //     title: "Success",
-    //     description: `Role ${initialData ? "updated" : "created"} successfully`
-    //   })
-    //   router.push("/admin/roles")
-    } catch (error) {
-    //   toast({
-    //     title: "Error",
-    //     description: `Failed to ${initialData ? "update" : "create"} role`,
-    //     variant: "destructive"
-    //   })
-    }
   }
 
   return (
     <Card className="w-full">
       <CardHeader>
         <CardTitle>
-          {initialData ? "Edit Role" : "Create New Role"}
+          {roleId ? "Edit Role" : "Create New Role"}
         </CardTitle>
       </CardHeader>
       
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={formik.handleSubmit}>
         <CardContent className="space-y-6">
           {/* Role Name */}
           <div className="space-y-2">
-            <Label htmlFor="role-name">Role Name</Label>
+            <Label htmlFor="name">Role Name</Label>
             <Input
-              id="role-name"
-              value={roleName}
-              onChange={(e) => setRoleName(e.target.value)}
+              id="name"
+              name="name"
+              value={formik.values.name}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
               placeholder="Enter role name"
-              required
+              disabled={formik.isSubmitting}
             />
+            {formik.touched.name && formik.errors.name && (
+              <div className="text-sm text-red-500">{formik.errors.name}</div>
+            )}
+          </div>
+
+          {/* Description */}
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Input
+              id="description"
+              name="description"
+              value={formik.values.description}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              placeholder="Enter role description"
+              disabled={formik.isSubmitting}
+            />
+            {formik.touched.description && formik.errors.description && (
+              <div className="text-sm text-red-500">{formik.errors.description}</div>
+            )}
           </div>
 
           {/* Modules Multi-select */}
           <div className="space-y-2">
             <Label>Modules</Label>
             <div className="flex flex-wrap gap-2 mb-2">
-              {selectedModules.map(moduleId => {
-                const module = availableModules.find(m => m.id === moduleId)
+              {formik.values.permissions.map(({ moduleId }) => {
+                const module = modules?.find(m => m.id === moduleId)
                 return (
                   <Badge key={moduleId} variant="secondary" className="flex items-center gap-1">
                     {module?.name}
                     <button
                       type="button"
-                      onClick={() => removeModule(moduleId)}
+                      onClick={() => handleModuleSelect(moduleId)}
                       className="ml-1 rounded-full hover:bg-muted"
+                      disabled={formik.isSubmitting}
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -305,24 +363,30 @@ export default function RoleManagementForm({
                 )
               })}
             </div>
-            <Select onValueChange={handleModuleSelect}>
+            <Select 
+              onValueChange={(value) => handleModuleSelect(Number(value))}
+              disabled={formik.isSubmitting || !modules}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select modules" />
               </SelectTrigger>
               <SelectContent>
-                {availableModules
-                  .filter(module => !selectedModules.includes(module.id))
+                {modules
+                  ?.filter(module => !formik.values.permissions.some(p => p.moduleId === module.id))
                   .map(module => (
-                    <SelectItem key={module.id} value={module.id}>
+                    <SelectItem key={module.id} value={module.id.toString()}>
                       {module.name}
                     </SelectItem>
                   ))}
               </SelectContent>
             </Select>
+            {formik.touched.permissions && formik.errors.permissions && (
+              <div className="text-sm text-red-500">At least one module is required</div>
+            )}
           </div>
 
           {/* Permissions Table */}
-          {selectedModules.length > 0 && (
+          {formik.values.permissions.length > 0 && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <Label>Permissions</Label>
@@ -336,6 +400,7 @@ export default function RoleManagementForm({
                       setSearchQuery(e.target.value)
                       setCurrentPage(1)
                     }}
+                    disabled={formik.isSubmitting}
                   />
                 </div>
               </div>
@@ -346,14 +411,16 @@ export default function RoleManagementForm({
                     <Checkbox
                       checked={selectAll}
                       onCheckedChange={() => toggleAllPermissions()}
+                      disabled={formik.isSubmitting}
                     />
                     All
                   </div>
-                  {permissionTypes.map(type => (
+                  {(["LIST", "UPDATE", "DELETE", "CREATE"] as PermissionAction[]).map(type => (
                     <div key={type} className="font-medium text-center flex gap-2 items-center justify-center">
                       <Checkbox
                         checked={permissionData.every(p => p.permissionActions[type])}
                         onCheckedChange={() => togglePermissionType(type)}
+                        disabled={formik.isSubmitting}
                       />
                       {type}
                     </div>
@@ -361,27 +428,40 @@ export default function RoleManagementForm({
                 </div>
 
                 {paginatedModules.length > 0 ? (
-                  paginatedModules.map(perm => (
-                    <div key={perm.moduleId} className="grid grid-cols-5 gap-4 p-4 border-b last:border-0">
-                      <div className="flex gap-2 items-center">
-                        <Checkbox
-                          checked={Object.values(perm.permissionActions).every(Boolean)}
-                          onCheckedChange={() => toggleModulePermissions(perm.moduleId)}
-                        />
-                        {perm.moduleName}
-                      </div>
-                      {permissionTypes.map(type => (
-                        <div key={`${perm.moduleId}-${type}`} className="flex justify-center">
+                  paginatedModules.map(perm => {
+                    const modulePermissions = formik.values.permissions.find(p => p.moduleId === perm.moduleId)
+                    const hasError = formik.touched.permissions && 
+                                    modulePermissions?.permissions.length === 0
+
+                    return (
+                      <div key={perm.moduleId} className={`grid grid-cols-5 gap-4 p-4 border-b last:border-0 ${hasError ? "bg-red-50" : ""}`}>
+                        <div className="flex gap-2 items-center">
                           <Checkbox
-                            checked={perm.permissionActions[type] || false}
-                            onCheckedChange={(checked) => 
-                              handlePermissionChange(perm.moduleId, type, checked === true)
-                            }
+                            checked={Object.values(perm.permissionActions).every(Boolean)}
+                            onCheckedChange={() => toggleModulePermissions(perm.moduleId)}
+                            disabled={formik.isSubmitting}
                           />
+                          {perm.moduleName}
                         </div>
-                      ))}
-                    </div>
-                  ))
+                        {(["LIST", "UPDATE", "DELETE", "CREATE"] as PermissionAction[]).map(type => (
+                          <div key={`${perm.moduleId}-${type}`} className="flex justify-center">
+                            <Checkbox
+                              checked={perm.permissionActions[type]}
+                              onCheckedChange={(checked) => 
+                                handlePermissionChange(perm.moduleId, type, checked === true)
+                              }
+                              disabled={formik.isSubmitting}
+                            />
+                          </div>
+                        ))}
+                        {hasError && (
+                          <div className="col-span-5 text-sm text-red-500">
+                            At least one permission is required for this module
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
                 ) : (
                   <div className="p-4 text-center text-muted-foreground">
                     No modules match your search
@@ -400,6 +480,7 @@ export default function RoleManagementForm({
                         setItemsPerPage(Number(value))
                         setCurrentPage(1)
                       }}
+                      disabled={formik.isSubmitting}
                     >
                       <SelectTrigger id="items-per-page" className="w-[70px]">
                         <SelectValue>{itemsPerPage}</SelectValue>
@@ -422,7 +503,7 @@ export default function RoleManagementForm({
                       variant="outline"
                       size="sm"
                       onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                      disabled={currentPage === 1}
+                      disabled={currentPage === 1 || formik.isSubmitting}
                     >
                       Previous
                     </Button>
@@ -433,7 +514,7 @@ export default function RoleManagementForm({
                       variant="outline"
                       size="sm"
                       onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                      disabled={currentPage === totalPages || totalPages === 0}
+                      disabled={currentPage === totalPages || totalPages === 0 || formik.isSubmitting}
                     >
                       Next
                     </Button>
@@ -449,14 +530,15 @@ export default function RoleManagementForm({
             variant="outline" 
             type="button"
             onClick={() => router.push("/access-control/roles")}
+            disabled={formik.isSubmitting}
           >
             Cancel
           </Button>
           <Button 
             type="submit"
-            disabled={isSubmitting}
+            disabled={formik.isSubmitting}
           >
-            {isSubmitting ? "Saving..." : initialData ? "Update Role" : "Create Role"}
+            {formik.isSubmitting ? "Saving..." : roleId ? "Update Role" : "Create Role"}
           </Button>
         </CardFooter>
       </form>

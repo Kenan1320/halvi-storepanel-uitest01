@@ -1,49 +1,59 @@
-import {IDeleteResponse, IRoleResponse, IRoles, IRoleUpdateData, IUpdateRoleResponse, Role, RoleType} from "../types/roles.type"
-import { IUserPaginationParams } from "../types/user.type";
+import {
+  Role,
+  RoleResponse,
+  RolesResponse,
+  CreateRolePayload,
+  UpdateRolePayload,
+  PermissionAction
+} from "../types/roles.type";
 import * as BaseApi from "./base-api";
 
 class RoleApiService {
-  private url = (action: string) => "roles"+action;
+  private url = (action: string) => `/vendors/roles${action}`;
 
-   public async create(body: RoleType): Promise<Role> {
-    return BaseApi._post({
+  public async create(body: CreateRolePayload): Promise<Role | undefined> {
+    return BaseApi._post<Role>({
       api: this.url("/"),
       data: body,
     });
   }
 
-  public async getAll(): Promise<IRoles> {
-    return BaseApi._get({
+  public async getAll(): Promise<RolesResponse | undefined> {
+    return BaseApi._get<RolesResponse>({
       api: this.url("/"),
       data: null,
     });
   }
 
-  public async getRolesPagination(paginationParam: IUserPaginationParams): Promise<IRoles> {
-    return BaseApi._get({
+  public async getRolesPagination(params: {
+    page: number;
+    limit: number;
+  }): Promise<RolesResponse | undefined> {
+    return BaseApi._get<RolesResponse>({
       api: this.url("/pagination"),
-      data: paginationParam,
+      data: params,
     });
   }
 
-  public async get(id: string): Promise<IRoleResponse> {
-    return BaseApi._get({
+  public async get(id: number): Promise<RoleResponse | undefined> {
+    return BaseApi._get<RoleResponse>({
       api: this.url(`/${id}`),
-      data: null  
+      data: null,
     });
   }
 
-
-
-  public async update(id: string, body: IRoleUpdateData): Promise<IUpdateRoleResponse> {
-    return BaseApi._patch({
+  public async update(
+    id: number,
+    body: UpdateRolePayload
+  ): Promise<RoleResponse | undefined> {
+    return BaseApi._patch<RoleResponse>({
       api: this.url(`/${id}`),
       data: body,
     });
-}
+  }
 
-  public async delete(id: string): Promise<IDeleteResponse> {
-    return BaseApi._delete({
+  public async delete(id: number): Promise<{ message: string } | undefined> {
+    return BaseApi._delete<{ message: string }>({
       api: this.url(`/${id}`),
       data: null,
     });

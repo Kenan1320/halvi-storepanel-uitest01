@@ -17,10 +17,7 @@ const RolesPage = () => {
     <ToastProvider>
       <Breadcrumb pageName="Create New Role" />
 
-      <RoleManagementForm
-        onSave={handleCreateRole}
-        isSubmitting={isCreating}
-      />
+      <RoleManagementForm/>
     </ToastProvider>
   );
 };

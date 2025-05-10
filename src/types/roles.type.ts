@@ -1,67 +1,13 @@
-import { PERMISSIONS } from "../utils/constants";
-import { IMetaData } from "./common.type";
+// types/role.type.ts
 
-export interface IRolesNames {
-  data: {
-    _id: string;
-    name: string;
-    data: any;
-  };
-}
-
-export type PermissionAction = typeof PERMISSIONS[number];
-
-
-export interface ICreateRoles {
-  name: string;
-  description: string;
-  permissions: {
-    module: string;
-    permissions: PermissionAction[];
-  }[];
-}
-
-
-export type TModule = {
-  _id: string;
-  name: string;
-  description: string;
-  __v: number;
-};
-
-export type TPermission = {
-  module: TModule;
-  permissions: string[];
-  _id: string;
-};
-
-export interface IRoles {
-  message: string;
-  data: Role[];
-  pagination: IMetaData
-}
-export interface Role {
-  _id: string;
-  name: string;
-  description: string;
-  permissions: TPermission[];
-  __v: number;
-}
-
-export interface commonResponse<T = any> {
-  message: string;
-  data: T;
-}
-
-export interface IDeleteResponse {
-  message: string;
-}
+export type PermissionAction = "LIST" | "UPDATE" | "DELETE" | "CREATE";
 
 export interface Module {
-  _id: string;
+  id: number;
   name: string;
   description: string;
-  __v: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ModuleApiResponse {
@@ -69,58 +15,68 @@ export interface ModuleApiResponse {
   data: Module[];
 }
 
-export interface Permission {
-  module: string;
-  permissions: string[];
+export interface RolePermission {
+  id: number;
+  roleId: number;
+  moduleId: number;
+  permissions: PermissionAction[];
+  createdAt: string;
+  updatedAt: string;
+  module: Module;
 }
 
-export interface RoleType {
+export interface Role {
+  id: number;
   name: string;
   description: string;
-  permissions: Permission[];
+  createdAt: string;
+  updatedAt: string;
+  permissions: RolePermission[];
 }
 
-export interface IModule {
-  _id: string;
-  name: string;
-  description: string;
-  __v: number;
-}
-
-export interface IPermission {
-  module: IModule;
-  permissions: ("GET" | "POST" | "DELETE" | "PUT" | "PATCH")[];
-  _id: string;
-}
-
-export interface IRoleData {
-  _id: string;
-  name: string;
-  description: string;
-  permissions: IPermission[];
-  __v: number;
-}
-
-export interface IRoleResponse {
+// For API responses
+export interface RoleResponse {
   message: string;
-  data: IRoleData;
+  data: Role;
 }
 
-export interface IUpdatedRolePermission {
-  module: TModule;
-  permissions: ("GET" | "POST" | "DELETE" | "PUT" | "PATCH")[];
-  _id: string;
+export interface RolesResponse {
+  message: string;
+  data: Role[];
+  pagination?: {
+    total: number;
+    page: number;
+    limit: number;
+  };
 }
 
-export interface IRoleUpdateData {
-  _id: string;
+// For creating/updating roles
+export interface CreateRolePayload {
   name: string;
   description: string;
-  permissions: IUpdatedRolePermission[];
-  __v: number;
+  permissions: {
+    moduleId: number;
+    permissions: PermissionAction[];
+  }[];
 }
 
-export interface IUpdateRoleResponse {
-  message: string;
-  data: IRoleUpdateData;
+export interface UpdateRolePayload extends Partial<CreateRolePayload> {
+  id: number;
+}
+
+// For form handling
+export interface RoleFormValues {
+  name: string;
+  description: string;
+  permissions: {
+    moduleId: number;
+    permissions: PermissionAction[];
+  }[];
+}
+
+// For permission management in UI
+export interface ModulePermission {
+  moduleId: number;
+  moduleName: string;
+  permissionActions: Record<PermissionAction, boolean>;
 }

@@ -84,7 +84,7 @@ const columns: Column[] = [
     label: "Role",
     filterable: true,
     filterOptions: ["Super Staffistrator", "Staffistrator", "Manager", "Editor", "Viewer"],
-    render: (value) => <Badge variant="outline">{value}</Badge>,
+    render: (value) => <Badge variant="outline">{value.role}</Badge>,
   },
   {
     key: "actions",

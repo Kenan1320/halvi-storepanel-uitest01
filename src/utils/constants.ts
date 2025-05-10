@@ -22,9 +22,8 @@ export const PASSWORD_POLICY = {
 export const UserSupportmaxLength = 250 ;
 
 export const PERMISSIONS =  [
-  "GET",
-  "PUT",
-  "POST",
-  "PATCH",
+  "LIST",
+  "CREATE",
+  "UPDATE",
   "DELETE",
 ]
