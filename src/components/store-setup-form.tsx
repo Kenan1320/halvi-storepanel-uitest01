@@ -32,6 +32,12 @@ export default function StoreSetupForm() {
   const [storyVideo, setStoryVideo] = useState<File | null>(null)
   const [address, setAddress] = useState("")
   const [location, setLocation] = useState({ lat: 0, lng: 0 })
+  const [storeType, setStoreType] = useState<string>("")
+  const [hasPhysicalShop, setHasPhysicalShop] = useState<boolean>(false)
+  const [eatsSubCategory, setEatsSubCategory] = useState<string>("")
+  const [localSubCategory, setLocalSubCategory] = useState<string>("")
+  const [customEatsSubCategory, setCustomEatsSubCategory] = useState<string>("")
+  const [customLocalSubCategory, setCustomLocalSubCategory] = useState<string>("")
 
   const handleWorkingHoursChange = (index: number, field: string, value: any) => {
     const updatedHours = [...workingHours]
@@ -91,29 +97,124 @@ export default function StoreSetupForm() {
               <Input id="wallet" value="5000" disabled />
             </div>
 
+
+            {/* Updated Category Selection */}
             <div className="space-y-2">
-              <Label htmlFor="section">Select Section</Label>
-              <Select disabled>
-                <SelectTrigger id="section">
-                  <SelectValue placeholder="Retail" />
+              <Label htmlFor="store-type">Select Store Type</Label>
+              <Select 
+                value={storeType}
+                onValueChange={(value) => {
+                  setStoreType(value)
+                  // Reset sub-category when main category changes
+                  setHasPhysicalShop(false)
+                }}
+                required
+              >
+                <SelectTrigger id="store-type">
+                  <SelectValue placeholder="Select store type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="retail">Retail</SelectItem>
+                  <SelectItem value="eats">Eats</SelectItem>
+                  <SelectItem value="online-store">Online Store (Mall)</SelectItem>
+                  <SelectItem value="local-shop">Local Shop</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="categories">Categories</Label>
-              <Select disabled>
-                <SelectTrigger id="categories">
-                  <SelectValue placeholder="General" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="general">General</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+
+            {/* Updated Eats Sub-category with custom input */}
+            {storeType === "eats" && (
+              <div className="space-y-2">
+                <Label htmlFor="sub-category">Select Sub-Category</Label>
+                <Select 
+                  value={eatsSubCategory}
+                  onValueChange={(value) => setEatsSubCategory(value)}
+                  required
+                >
+                  <SelectTrigger id="sub-category">
+                    <SelectValue placeholder="Select sub-category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="restaurant">Restaurant</SelectItem>
+                    <SelectItem value="coffee-shop">Coffee Shop</SelectItem>
+                    <SelectItem value="sweets-shop">Sweets Shop</SelectItem>
+                    <SelectItem value="ice-cream-shop">Ice Cream Shop</SelectItem>
+                    <SelectItem value="other-eats">Other (Please specify)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {eatsSubCategory === "other-eats" && (
+                  <div className="mt-2">
+                    <Input
+                      placeholder="Please specify your sub-category"
+                      value={customEatsSubCategory}
+                      onChange={(e) => setCustomEatsSubCategory(e.target.value)}
+                      required
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Online Store section remains the same */}
+            {storeType === "online-store" && (
+              <div className="space-y-2">
+                <Label>Do you also operate a physical/local shop?</Label>
+                <div className="flex gap-4">
+                  <Button
+                    type="button"
+                    variant={hasPhysicalShop ? "default" : "outline"}
+                    onClick={() => setHasPhysicalShop(true)}
+                  >
+                    Yes
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={!hasPhysicalShop ? "default" : "outline"}
+                    onClick={() => setHasPhysicalShop(false)}
+                  >
+                    No
+                  </Button>
+                </div>
+                {hasPhysicalShop && (
+                  <p className="text-sm text-muted-foreground">
+                    You will also be registered under "Local Shop" in addition to being listed as an online store.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Updated Local Shop Sub-category with custom input */}
+            {storeType === "local-shop" && (
+              <div className="space-y-2">
+                <Label htmlFor="sub-category">Select Sub-Category</Label>
+                <Select 
+                  value={localSubCategory}
+                  onValueChange={(value) => setLocalSubCategory(value)}
+                  required
+                >
+                  <SelectTrigger id="sub-category">
+                    <SelectValue placeholder="Select sub-category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="grocery-shop">Grocery Shop</SelectItem>
+                    <SelectItem value="clothing-shop">Clothing Shop</SelectItem>
+                    <SelectItem value="butcher-shop">Butcher / Meat Shop</SelectItem>
+                    <SelectItem value="other-local">Other (Please specify)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {localSubCategory === "other-local" && (
+                  <div className="mt-2">
+                    <Input
+                      placeholder="Please specify your sub-category"
+                      value={customLocalSubCategory}
+                      onChange={(e) => setCustomLocalSubCategory(e.target.value)}
+                      required
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
 
             <div className="space-y-2">
               <Label htmlFor="phone">Phone</Label>

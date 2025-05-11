@@ -1,9 +1,12 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { MapPin, Search } from "lucide-react"
+import { GoogleMap, Marker, useJsApiLoader, Libraries } from "@react-google-maps/api"
+
+const libraries: Libraries = ["places"]
 
 interface GoogleMapComponentProps {
   onAddressChange: (address: string, location: { lat: number; lng: number }) => void
@@ -11,111 +14,55 @@ interface GoogleMapComponentProps {
   location: { lat: number; lng: number }
 }
 
-declare global {
-  interface Window {
-    google: any
-  }
-}
-
 export default function GoogleMapComponent({ onAddressChange, address, location }: GoogleMapComponentProps) {
   const [searchQuery, setSearchQuery] = useState(address)
   const [suggestions, setSuggestions] = useState<{ description: string; place_id: string }[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
-  const mapRef = useRef<HTMLDivElement>(null)
-  const mapInstanceRef = useRef<any>(null)
-  const autocompleteServiceRef = useRef<any>(null)
-  const placesServiceRef = useRef<any>(null)
-  const markerRef = useRef<any>(null)
+  const [map, setMap] = useState<google.maps.Map | null>(null)
+  const autocompleteServiceRef = useRef<google.maps.places.AutocompleteService | null>(null)
+  const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null)
+  const geocoderRef = useRef<google.maps.Geocoder | null>(null)
 
-  // Initialize Google Maps API
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
+    libraries,
+  })
+
+  // Initialize services when map is loaded
   useEffect(() => {
-    if (!window.google) {
-      const script = document.createElement('script')
-      script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyCZkmFpx-yBkO-QlpBM4GrkOdEKWnBTV2I&libraries=places`
-      script.async = true
-      script.defer = true
-      script.onload = initializeMap
-      document.head.appendChild(script)
-    } else {
-      initializeMap()
+    if (isLoaded && map) {
+      autocompleteServiceRef.current = new window.google.maps.places.AutocompleteService()
+      placesServiceRef.current = new window.google.maps.places.PlacesService(map)
+      geocoderRef.current = new window.google.maps.Geocoder()
     }
+  }, [isLoaded, map])
 
-    return () => {
-      if (markerRef.current) {
-        markerRef.current.setMap(null)
-      }
-    }
+  const onLoad = useCallback((map: google.maps.Map) => {
+    setMap(map)
   }, [])
 
-  const initializeMap = () => {
-    if (!mapRef.current || !window.google) return
+  const onUnmount = useCallback(() => {
+    setMap(null)
+  }, [])
 
-    // Initialize services
-    autocompleteServiceRef.current = new window.google.maps.places.AutocompleteService()
-    placesServiceRef.current = new window.google.maps.places.PlacesService(mapRef.current)
-
-    // Create map instance
-    const map = new window.google.maps.Map(mapRef.current, {
-      center: location.lat && location.lng ? location : { lat: 0, lng: 0 },
-      zoom: location.lat && location.lng ? 15 : 2,
-      mapTypeControl: false,
-      streetViewControl: false,
-    })
-
-    mapInstanceRef.current = map
-
-    // Add marker if location is provided
-    if (location.lat && location.lng) {
-      addMarker(location)
+  const handleMapClick = (e: google.maps.MapMouseEvent) => {
+    if (!e.latLng) return
+    
+    const clickedLocation = {
+      lat: e.latLng.lat(),
+      lng: e.latLng.lng()
     }
-
-    // Add click listener to map
-    map.addListener('click', (e: any) => {
-      const clickedLocation = {
-        lat: e.latLng.lat(),
-        lng: e.latLng.lng()
-      }
-      reverseGeocode(clickedLocation)
-    })
-  }
-
-  const addMarker = (position: { lat: number; lng: number }) => {
-    if (!window.google || !mapInstanceRef.current) return
-
-    // Remove previous marker if exists
-    if (markerRef.current) {
-      markerRef.current.setMap(null)
-    }
-
-    // Add new marker
-    markerRef.current = new window.google.maps.Marker({
-      position,
-      map: mapInstanceRef.current,
-      draggable: true
-    })
-
-    // Center map on marker
-    mapInstanceRef.current.setCenter(position)
-
-    // Add dragend listener
-    markerRef.current.addListener('dragend', (e: any) => {
-      const newPosition = {
-        lat: e.latLng.lat(),
-        lng: e.latLng.lng()
-      }
-      reverseGeocode(newPosition)
-    })
+    reverseGeocode(clickedLocation)
   }
 
   const reverseGeocode = (location: { lat: number; lng: number }) => {
-    if (!window.google) return
+    if (!geocoderRef.current) return
 
-    const geocoder = new window.google.maps.Geocoder()
-    geocoder.geocode({ location }, (results: any[], status: string) => {
-      if (status === 'OK' && results[0]) {
-        setSearchQuery(results[0].formatted_address)
-        onAddressChange(results[0].formatted_address, location)
-        addMarker(location)
+    geocoderRef.current.geocode({ location }, (results, status) => {
+      if (status === 'OK' && results?.[0]) {
+        setSearchQuery(results[0].formatted_address || '')
+        onAddressChange(results[0].formatted_address || '', location)
       }
     })
   }
@@ -129,8 +76,8 @@ export default function GoogleMapComponent({ onAddressChange, address, location 
 
     autocompleteServiceRef.current.getPlacePredictions(
       { input: query },
-      (predictions: any[], status: string) => {
-        if (status === 'OK') {
+      (predictions, status) => {
+        if (status === 'OK' && predictions) {
           setSuggestions(predictions)
           setShowSuggestions(true)
         } else {
@@ -146,33 +93,31 @@ export default function GoogleMapComponent({ onAddressChange, address, location 
 
     placesServiceRef.current.getDetails(
       { placeId },
-      (place: any, status: string) => {
-        if (status === 'OK') {
+      (place, status) => {
+        if (status === 'OK' && place?.geometry?.location) {
           const location = {
             lat: place.geometry.location.lat(),
             lng: place.geometry.location.lng()
           }
           setSearchQuery(description)
           onAddressChange(description, location)
-          addMarker(location)
           setShowSuggestions(false)
+          
+          // Center the map on the selected location
+          if (map) {
+            map.panTo(location)
+            map.setZoom(15)
+          }
         }
       }
     )
   }
 
-  // Update map when location prop changes
-  useEffect(() => {
-    if (mapInstanceRef.current && location.lat && location.lng) {
-      mapInstanceRef.current.setCenter(location)
-      addMarker(location)
-    }
-  }, [location])
-
-  // Update search query when address prop changes
-  useEffect(() => {
-    setSearchQuery(address)
-  }, [address])
+  if (!isLoaded) {
+    return <div className="w-full h-[400px] bg-muted rounded-md border flex items-center justify-center">
+      Loading map...
+    </div>
+  }
 
   return (
     <div className="space-y-4">
@@ -213,13 +158,33 @@ export default function GoogleMapComponent({ onAddressChange, address, location 
         )}
       </div>
 
-      <div 
-        ref={mapRef} 
-        className="w-full h-64 bg-muted rounded-md border"
-        style={{ minHeight: '400px' }}
+      <GoogleMap
+        mapContainerClassName="w-full h-[400px] rounded-md border"
+        center={location.lat && location.lng ? location : { lat: 0, lng: 0 }}
+        zoom={location.lat && location.lng ? 15 : 2}
+        onLoad={onLoad}
+        onUnmount={onUnmount}
+        onClick={handleMapClick}
+        options={{
+          mapTypeControl: false,
+          streetViewControl: false,
+        }}
       >
-      
-      </div>
+        {location.lat && location.lng && (
+          <Marker
+            position={location}
+            draggable
+            onDragEnd={(e) => {
+              if (!e.latLng) return
+              const newPosition = {
+                lat: e.latLng.lat(),
+                lng: e.latLng.lng()
+              }
+              reverseGeocode(newPosition)
+            }}
+          />
+        )}
+      </GoogleMap>
 
       {address && (
         <div className="text-sm">

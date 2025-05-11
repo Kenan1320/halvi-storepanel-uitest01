@@ -131,7 +131,7 @@ const columns: Column[] = [
         Pending: { variant: "secondary" },
       }
 
-      return <Badge variant={variants[value]?.variant || "outline"}>{value}</Badge>
+      return <Badge variant={variants[value]?.variant || "outline"}>{value.status}</Badge>
     },
   },
   {

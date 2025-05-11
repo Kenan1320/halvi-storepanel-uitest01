@@ -136,7 +136,7 @@ const columns: Column[] = [
         Pending: { variant: "secondary" },
       }
 
-      return <Badge variant={variants[value]?.variant || "outline"}>{value}</Badge>
+      return <Badge variant={variants[value]?.variant || "outline"}>{value.status}</Badge>
     },
   },
   {
@@ -148,7 +148,7 @@ const columns: Column[] = [
   {
     key: "createdAt",
     label: "Created At",
-    render: (value) => new Date(value).toLocaleDateString(),
+    render: (value) => new Date(value.createdAt).toLocaleDateString(),
   },
 ]
 
@@ -209,15 +209,6 @@ const OrdersPage =  () => {
   return (
     <ToastProvider>
       <Breadcrumb pageName="Orders" />
-      <div className="mb-3">
-        <Suspense fallback={<OverviewCardsSkeleton cards={overviewData.length} />}>
-          <OverviewCardsGroup data={overviewData} classes={{
-            card: "flex items-center justify-between",
-            cardData: "items-center flex justify-between",
-            container: ""
-          }} />
-        </Suspense>
-      </div>
       <DataTable
         type="Order"
         data={sampleData}
